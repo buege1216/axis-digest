@@ -50,3 +50,52 @@ class Commentator:
 【核心主題】一句話說明文章核心（30字內）
 【重點整理】3個要點，每點以「• 」開頭
 【延伸思考】建議讀者可進一步思考的問題（1句）
+
+文章標題：{article.get('title', '')}
+文章內容：{content}"""
+        return self._ask(prompt, max_tokens=400)
+
+    def comment(self, article, summary):
+        content = article.get("content", "")[:1500]
+        prompt = f"""{COMMENTATOR_SYSTEM}
+
+請針對以下文章提供專業點評，直接輸出點評內文：
+
+文章標題：{article.get('title', '')}
+文章摘要：{summary}
+文章節錄：{content}"""
+        return self._ask(prompt, max_tokens=500)
+
+    def process_all(self, batch=8):
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT id, title, content FROM articles
+                WHERE summary IS NULL AND content != ''
+                ORDER BY fetched_at DESC LIMIT ?
+            """, (batch,)).fetchall()
+
+        articles = [dict(r) for r in rows]
+        if not articles:
+            logger.info("沒有待處理文章")
+            return 0
+
+        done = 0
+        for art in articles:
+            logger.info(f"處理：{art['title'][:50]}")
+            summary = self.summarize(art)
+            time.sleep(1)
+            commentary = self.comment(art, summary) if summary else ""
+
+            if summary:
+                with sqlite3.connect(DB_PATH) as conn:
+                    conn.execute(
+                        "UPDATE articles SET summary=?, commentary=? WHERE id=?",
+                        (summary, commentary, art["id"])
+                    )
+                    conn.commit()
+                done += 1
+            time.sleep(2)
+
+        logger.info(f"完成 {done} 篇")
+        return done
