@@ -4,18 +4,20 @@ import sqlite3
 import hashlib
 import time
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://www.axisweb.org"
-LIST_URL = "https://www.axisweb.org/articles"
+BASE_URL = "https://www.axismag.jp"
+LIST_URL = "https://www.axismag.jp"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AxisDigestBot/1.0)"}
 REQUEST_DELAY = 2.0
 MAX_ARTICLES = 10
 DB_PATH = Path("articles.db")
+
 
 class AxisScraper:
     def __init__(self):
@@ -68,7 +70,7 @@ class AxisScraper:
                     datetime.utcnow().isoformat(),
                 ))
                 conn.commit()
-                logger.info(f"已儲存：{article['title'][:60]}")
+                logger.info("已儲存：" + article["title"][:60])
             except sqlite3.IntegrityError:
                 pass
 
@@ -77,16 +79,16 @@ class AxisScraper:
             resp = requests.get(LIST_URL, headers=HEADERS, timeout=15)
             resp.raise_for_status()
         except Exception as e:
-            logger.error(f"列表頁失敗：{e}")
+            logger.error("列表頁失敗：" + str(e))
             return []
 
         soup = BeautifulSoup(resp.text, "html.parser")
         links = []
-        for a in soup.select("a[href]"):
+        for a in soup.find_all("a", href=True):
             href = a["href"]
             if not href.startswith("http"):
-                href = BASE_URL.rstrip("/") + "/" + href.lstrip("/")
-            if "/article/" in href or "/news/" in href:
+                href = BASE_URL + href
+            if re.search(r"/posts/\d{4}/\d{2}/\d+\.html", href):
                 links.append(href)
         return list(dict.fromkeys(links))
 
@@ -95,20 +97,21 @@ class AxisScraper:
             resp = requests.get(url, headers=HEADERS, timeout=15)
             resp.raise_for_status()
         except Exception as e:
-            logger.error(f"文章頁失敗 {url}：{e}")
+            logger.error("文章頁失敗：" + str(e))
             return {}
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        title     = soup.find("h1")
-        author_el = soup.select_one(".author-name, .byline, [rel='author']")
-        date_el   = soup.select_one("time, .published-date")
-        body_el   = soup.select_one("article, .article-body, .entry-content, main")
 
+        title = soup.find("h1")
+        date_el = soup.find("time")
+        author_el = soup.select_one(".author, .writer, .name")
+
+        body = soup.select_one(".post-content, .entry-content, .article-body, article")
         paragraphs = []
-        if body_el:
-            for p in body_el.find_all("p"):
+        if body:
+            for p in body.find_all("p"):
                 text = p.get_text(" ", strip=True)
-                if len(text) > 40:
+                if len(text) > 30:
                     paragraphs.append(text)
 
         return {
@@ -121,6 +124,7 @@ class AxisScraper:
 
     def run(self):
         links = self._fetch_links()
+        logger.info("找到 " + str(len(links)) + " 個連結")
         new_articles = []
         for url in links:
             if len(new_articles) >= MAX_ARTICLES:
@@ -129,10 +133,10 @@ class AxisScraper:
                 continue
             time.sleep(REQUEST_DELAY)
             article = self._fetch_content(url)
-            if article.get("content"):
+            if article.get("title"):
                 self._save_article(article)
                 new_articles.append(article)
-        logger.info(f"新增 {len(new_articles)} 篇文章")
+        logger.info("新增 " + str(len(new_articles)) + " 篇文章")
         return new_articles
 
     def get_unsent(self, limit=8):
