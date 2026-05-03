@@ -98,4 +98,57 @@ class AxisScraper:
             logger.error(f"文章頁失敗 {url}：{e}")
             return {}
 
-        soup = BeautifulSoup(resp.
+        soup = BeautifulSoup(resp.text, "html.parser")
+        title     = soup.find("h1")
+        author_el = soup.select_one(".author-name, .byline, [rel='author']")
+        date_el   = soup.select_one("time, .published-date")
+        body_el   = soup.select_one("article, .article-body, .entry-content, main")
+
+        paragraphs = []
+        if body_el:
+            for p in body_el.find_all("p"):
+                text = p.get_text(" ", strip=True)
+                if len(text) > 40:
+                    paragraphs.append(text)
+
+        return {
+            "url":       url,
+            "title":     title.get_text(strip=True) if title else "",
+            "author":    author_el.get_text(strip=True) if author_el else "",
+            "published": date_el.get_text(strip=True) if date_el else "",
+            "content":   "\n\n".join(paragraphs),
+        }
+
+    def run(self):
+        links = self._fetch_links()
+        new_articles = []
+        for url in links:
+            if len(new_articles) >= MAX_ARTICLES:
+                break
+            if self._is_seen(url):
+                continue
+            time.sleep(REQUEST_DELAY)
+            article = self._fetch_content(url)
+            if article.get("content"):
+                self._save_article(article)
+                new_articles.append(article)
+        logger.info(f"新增 {len(new_articles)} 篇文章")
+        return new_articles
+
+    def get_unsent(self, limit=8):
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT * FROM articles
+                WHERE sent = 0 AND summary IS NOT NULL
+                ORDER BY fetched_at DESC LIMIT ?
+            """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_sent(self, ids):
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.executemany(
+                "UPDATE articles SET sent = 1 WHERE id = ?",
+                [(i,) for i in ids]
+            )
+            conn.commit()
