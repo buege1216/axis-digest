@@ -2,8 +2,11 @@ name: 軸心週報 Weekly Digest
 
 on:
   schedule:
-    - cron: '0 0 * * 0'  # 每週日 UTC 00:00 = 台北時間 08:00
-  workflow_dispatch:       # 允許手動立即執行
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   send-digest:
@@ -14,6 +17,15 @@ jobs:
     steps:
       - name: 下載程式碼
         uses: actions/checkout@v4.2.2
+
+      - name: 還原資料庫
+        run: |
+          if [ -f db/articles.db ]; then
+            cp db/articles.db articles.db
+            echo "✅ 資料庫已還原"
+          else
+            echo "📭 第一次執行，資料庫從空白開始"
+          fi
 
       - name: 安裝 Python
         uses: actions/setup-python@v5.6.0
@@ -30,3 +42,13 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
+
+      - name: 儲存資料庫
+        run: |
+          mkdir -p db
+          cp articles.db db/articles.db
+          git config user.name "Axis Digest Bot"
+          git config user.email "bot@axis-digest"
+          git add db/articles.db
+          git diff --staged --quiet || git commit -m "更新文章資料庫"
+          git push
