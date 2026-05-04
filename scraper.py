@@ -14,16 +14,21 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.axismag.jp"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AxisDigestBot/1.0)"}
 REQUEST_DELAY = 2.0
-MAX_ARTICLES = 10
 DB_PATH = Path("articles.db")
 
-# 歷史文章翻頁設定
-# axismag.jp 的文章列表網址格式：
-# 第1頁：https://www.axismag.jp/posts
-# 第2頁：https://www.axismag.jp/posts?paged=2
-# 第3頁：https://www.axismag.jp/posts?paged=3
-LIST_BASE = "https://www.axismag.jp/posts"
-MAX_PAGES = 50  # 最多翻幾頁（每頁約10篇，50頁約500篇歷史文章）
+# 你選的類別
+CATEGORIES = [
+    "product",
+    "business",
+    "technology",
+    "art",
+    "graphic",
+    "craft",
+    "culture",
+]
+
+MAX_NEW_PER_CATEGORY = 3   # 每個類別每次最多抓幾篇新文章
+MAX_PAGES_PER_CATEGORY = 5 # 每個類別每次最多翻幾頁
 
 
 class AxisScraper:
@@ -40,11 +45,19 @@ class AxisScraper:
                     title      TEXT,
                     author     TEXT,
                     published  TEXT,
+                    category   TEXT,
                     content    TEXT,
                     summary    TEXT,
                     commentary TEXT,
                     fetched_at TEXT NOT NULL,
                     sent       INTEGER DEFAULT 0
+                )
+            """)
+            # 記錄每個類別翻到第幾頁了
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS category_progress (
+                    category TEXT PRIMARY KEY,
+                    next_page INTEGER DEFAULT 1
                 )
             """)
             conn.commit()
@@ -60,32 +73,50 @@ class AxisScraper:
             ).fetchone()
         return row is not None
 
+    def _get_next_page(self, category):
+        with sqlite3.connect(DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT next_page FROM category_progress WHERE category = ?",
+                (category,)
+            ).fetchone()
+        return row[0] if row else 1
+
+    def _save_next_page(self, category, page):
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute("""
+                INSERT INTO category_progress (category, next_page)
+                VALUES (?, ?)
+                ON CONFLICT(category) DO UPDATE SET next_page = ?
+            """, (category, page, page))
+            conn.commit()
+
     def _save_article(self, article):
         with sqlite3.connect(DB_PATH) as conn:
             try:
                 conn.execute("""
                     INSERT INTO articles
-                        (url, url_hash, title, author, published, content, fetched_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                        (url, url_hash, title, author, published, category, content, fetched_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     article["url"],
                     self._url_hash(article["url"]),
                     article.get("title", ""),
                     article.get("author", ""),
                     article.get("published", ""),
+                    article.get("category", ""),
                     article.get("content", ""),
                     datetime.utcnow().isoformat(),
                 ))
                 conn.commit()
-                logger.info("已儲存：" + article["title"][:60])
+                logger.info("已儲存：" + article["title"][:50])
             except sqlite3.IntegrityError:
                 pass
 
-    def _fetch_links_from_page(self, page_num):
-        if page_num == 1:
-            url = LIST_BASE
+    def _fetch_links_from_page(self, category, page):
+        if page == 1:
+            url = BASE_URL + "/posts/" + category
         else:
-            url = LIST_BASE + "?paged=" + str(page_num)
+            url = BASE_URL + "/posts/" + category + "?paged=" + str(page)
 
         try:
             resp = requests.get(url, headers=HEADERS, timeout=15)
@@ -93,7 +124,7 @@ class AxisScraper:
                 return []
             resp.raise_for_status()
         except Exception as e:
-            logger.error("列表頁失敗（第" + str(page_num) + "頁）：" + str(e))
+            logger.error("列表頁失敗：" + str(e))
             return []
 
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -106,7 +137,7 @@ class AxisScraper:
                 links.append(href)
         return list(dict.fromkeys(links))
 
-    def _fetch_content(self, url):
+    def _fetch_content(self, url, category):
         try:
             resp = requests.get(url, headers=HEADERS, timeout=15)
             resp.raise_for_status()
@@ -132,47 +163,53 @@ class AxisScraper:
             "title":     title.get_text(strip=True) if title else "",
             "author":    author_el.get_text(strip=True) if author_el else "",
             "published": date_el.get_text(strip=True) if date_el else "",
+            "category":  category,
             "content":   "\n\n".join(paragraphs),
         }
 
     def run(self):
-        new_articles = []
+        all_new = []
 
-        for page in range(1, MAX_PAGES + 1):
-            if len(new_articles) >= MAX_ARTICLES:
-                break
+        for category in CATEGORIES:
+            logger.info("── 類別：" + category + " ──")
+            start_page = self._get_next_page(category)
+            new_count = 0
+            current_page = start_page
 
-            logger.info("掃描第 " + str(page) + " 頁...")
-            links = self._fetch_links_from_page(page)
-
-            if not links:
-                logger.info("第 " + str(page) + " 頁沒有文章，停止翻頁")
-                break
-
-            # 如果這頁的文章全都看過了，繼續翻下一頁找新的
-            all_seen = all(self._is_seen(url) for url in links)
-            if all_seen:
-                logger.info("第 " + str(page) + " 頁全部看過，繼續往下翻...")
-                time.sleep(REQUEST_DELAY)
-                continue
-
-            for url in links:
-                if len(new_articles) >= MAX_ARTICLES:
+            for page in range(start_page, start_page + MAX_PAGES_PER_CATEGORY):
+                if new_count >= MAX_NEW_PER_CATEGORY:
                     break
-                if self._is_seen(url):
-                    continue
+
+                logger.info("  第 " + str(page) + " 頁...")
+                links = self._fetch_links_from_page(category, page)
+
+                if not links:
+                    logger.info("  已到底，類別 " + category + " 全部掃完")
+                    self._save_next_page(category, page)
+                    break
+
+                for url in links:
+                    if new_count >= MAX_NEW_PER_CATEGORY:
+                        break
+                    if self._is_seen(url):
+                        continue
+                    time.sleep(REQUEST_DELAY)
+                    article = self._fetch_content(url, category)
+                    if article.get("title"):
+                        self._save_article(article)
+                        all_new.append(article)
+                        new_count += 1
+
+                current_page = page + 1
                 time.sleep(REQUEST_DELAY)
-                article = self._fetch_content(url)
-                if article.get("title"):
-                    self._save_article(article)
-                    new_articles.append(article)
 
-            time.sleep(REQUEST_DELAY)
+            self._save_next_page(category, current_page)
+            logger.info("  本次新增 " + str(new_count) + " 篇")
 
-        logger.info("本次新增 " + str(len(new_articles)) + " 篇文章")
-        return new_articles
+        logger.info("全部類別共新增 " + str(len(all_new)) + " 篇文章")
+        return all_new
 
-    def get_unsent(self, limit=8):
+    def get_unsent(self, limit=15):
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute("""
