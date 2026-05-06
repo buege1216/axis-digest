@@ -20,8 +20,8 @@ jobs:
 
       - name: 還原資料庫
         run: |
-          if [ -f db/last_page.txt ]; then
-            cp db/last_page.txt last_page.txt
+          if [ -f db/sitemap_progress.txt ]; then
+            cp db/sitemap_progress.txt sitemap_progress.txt
             echo "✅ 進度檔已還原"
           fi
 
@@ -43,6 +43,6 @@ jobs:
 
       - name: 儲存資料庫
         run: |
-          if [ -f last_page.txt ]; then
-            cp last_page.txt db/last_page.txt
+          if [ -f sitemap_progress.txt ]; then
+            cp sitemap_progress.txt db/sitemap_progress.txt
           fi
