@@ -160,7 +160,10 @@ class AxisScraper:
             content = meta_content
 
         if len(content) < 30:
+            logger.info("  內容太短跳過（" + str(len(content)) + " 字）：" + title[:30])
             return None
+
+        logger.info("  內容長度：" + str(len(content)) + " 字")
 
         # 從網址抓年月當作發布日期備用
         published = ""
