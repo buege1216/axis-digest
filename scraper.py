@@ -131,9 +131,11 @@ class AxisScraper:
 
         title_el = soup.find("h1")
         if not title_el:
+            logger.info("  無標題跳過：" + url[-30:])
             return None
         title = title_el.get_text(strip=True)
         if len(title) < 5:
+            logger.info("  標題太短跳過：" + title)
             return None
 
         date_el = soup.find("time")
