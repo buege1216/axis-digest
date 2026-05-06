@@ -20,11 +20,9 @@ jobs:
 
       - name: 還原資料庫
         run: |
-          if [ -f db/articles.db ]; then
-            cp db/articles.db articles.db
-            echo "✅ 資料庫已還原"
-          else
-            echo "📭 第一次執行，資料庫從空白開始"
+          if [ -f db/last_page.txt ]; then
+            cp db/last_page.txt last_page.txt
+            echo "✅ 進度檔已還原"
           fi
 
       - name: 安裝 Python
@@ -45,10 +43,6 @@ jobs:
 
       - name: 儲存資料庫
         run: |
-          mkdir -p db
-          cp articles.db db/articles.db
-          git config user.name "Axis Digest Bot"
-          git config user.email "bot@axis-digest"
-          git add db/articles.db
-          git diff --staged --quiet || git commit -m "更新文章資料庫"
-          git push
+          if [ -f last_page.txt ]; then
+            cp last_page.txt db/last_page.txt
+          fi
