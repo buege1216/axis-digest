@@ -1,8 +1,11 @@
 import requests
+from bs4 import BeautifulSoup
 import sqlite3
 import hashlib
 import time
 import logging
+import re
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 
@@ -10,27 +13,19 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 DB_PATH = Path("articles.db")
-PROGRESS_FILE = Path("last_page.txt")
+PROGRESS_FILE = Path("sitemap_progress.txt")
 REQUEST_DELAY = 2.0
 
-# WordPress REST API
-API_URL = "https://www.axismag.jp/wp-json/wp/v2/posts"
+BASE_URL = "https://www.axismag.jp"
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AxisDigestBot/1.0)"}
 
-# 你選的類別 ID（從 API 取得）
-# product=4, business=8, technology=10, art=6, graphic=11, craft=16, culture=15
-TARGET_CATEGORY_IDS = [4, 8, 10, 6, 11, 16, 15]
-CATEGORY_MAP = {
-    4:  "product",
-    8:  "business",
-    10: "technology",
-    6:  "art",
-    11: "graphic",
-    16: "craft",
-    15: "culture",
-}
+# sitemap 從15往1讀（新到舊）
+SITEMAP_URLS = [
+    "https://www.axismag.jp/post_list-sitemap" + str(i) + ".xml"
+    for i in range(15, 0, -1)
+]
 
-ARTICLES_PER_PAGE = 10
-MAX_PAGES_PER_RUN = 3
+MAX_ARTICLES_PER_RUN = 15  # 每次最多抓幾篇
 
 
 class AxisScraper:
@@ -68,13 +63,15 @@ class AxisScraper:
             ).fetchone()
         return row is not None
 
-    def _get_last_page(self):
+    def _get_progress(self):
+        """回傳 (sitemap_index, url_index)，代表上次讀到哪裡"""
         if PROGRESS_FILE.exists():
-            return int(PROGRESS_FILE.read_text().strip())
-        return 1
+            parts = PROGRESS_FILE.read_text().strip().split(",")
+            return int(parts[0]), int(parts[1])
+        return 0, 0  # 從 sitemap15 第0筆開始
 
-    def _save_last_page(self, page):
-        PROGRESS_FILE.write_text(str(page))
+    def _save_progress(self, sitemap_idx, url_idx):
+        PROGRESS_FILE.write_text(str(sitemap_idx) + "," + str(url_idx))
 
     def _save_article(self, article):
         with sqlite3.connect(DB_PATH) as conn:
@@ -98,84 +95,138 @@ class AxisScraper:
             except sqlite3.IntegrityError:
                 pass
 
-    def _strip_html(self, html):
-        import re
-        text = re.sub(r"<[^>]+>", " ", html)
-        text = re.sub(r"\s+", " ", text).strip()
-        return text
-
-    def _fetch_page(self, page):
-        params = {
-            "per_page": ARTICLES_PER_PAGE,
-            "page":     page,
-            "orderby":  "date",
-            "order":    "desc",
-            "_fields":  "id,link,title,content,date,categories",
-        }
+    def _fetch_sitemap_urls(self, sitemap_url):
+        """從 sitemap XML 取得所有文章網址"""
         try:
-            resp = requests.get(API_URL, params=params,
-                                headers={"User-Agent": "AxisDigestBot/1.0"},
-                                timeout=20)
-            if resp.status_code == 400:
-                return []  # 超過最大頁數
+            resp = requests.get(sitemap_url, headers=HEADERS, timeout=20)
             resp.raise_for_status()
-            return resp.json()
         except Exception as e:
-            logger.error("API 請求失敗：" + str(e))
+            logger.error("Sitemap 讀取失敗：" + str(e))
             return []
 
+        urls = []
+        try:
+            root = ET.fromstring(resp.content)
+            ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+            for loc in root.findall(".//sm:loc", ns):
+                url = loc.text.strip()
+                if re.search(r"/posts/\d{4}/\d{2}/\d+\.html", url):
+                    urls.append(url)
+        except Exception as e:
+            logger.error("Sitemap 解析失敗：" + str(e))
+        return urls
+
+    def _fetch_article(self, url):
+        """抓取單篇文章內容"""
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+        except Exception as e:
+            logger.debug("文章抓取失敗：" + str(e))
+            return None
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        title_el = soup.find("h1")
+        if not title_el:
+            return None
+        title = title_el.get_text(strip=True)
+        if len(title) < 5:
+            return None
+
+        date_el = soup.find("time")
+
+        # 從 meta og:description 取得摘要當作備用內文
+        meta_desc = soup.find("meta", {"name": "description"}) or \
+                    soup.find("meta", {"property": "og:description"})
+        meta_content = meta_desc.get("content", "") if meta_desc else ""
+
+        # 嘗試抓內文
+        body = soup.select_one(".post-content, .entry-content, .article-body, "
+                               ".article__body, .article-text, #article-body, article")
+        paragraphs = []
+        if body:
+            for p in body.find_all("p"):
+                text = p.get_text(" ", strip=True)
+                if len(text) > 30:
+                    paragraphs.append(text)
+
+        content = "\n\n".join(paragraphs)
+
+        # 如果內文太短，用 meta description 補充
+        if len(content) < 100 and meta_content:
+            content = meta_content
+
+        if len(content) < 30:
+            return None
+
+        # 從網址抓年月當作發布日期備用
+        published = ""
+        if date_el:
+            published = date_el.get_text(strip=True)
+        else:
+            m = re.search(r"/posts/(\d{4})/(\d{2})/", url)
+            if m:
+                published = m.group(1) + "-" + m.group(2)
+
+        return {
+            "url":       url,
+            "title":     title,
+            "author":    "",
+            "published": published,
+            "category":  "",
+            "content":   content[:4000],
+        }
+
     def run(self):
-        start_page = self._get_last_page()
-        logger.info("從第 " + str(start_page) + " 頁開始抓取（每頁 " + str(ARTICLES_PER_PAGE) + " 篇）")
+        sitemap_idx, url_idx = self._get_progress()
+        logger.info("從 sitemap " + str(sitemap_idx + 1) + "/15，第 " + str(url_idx) + " 筆開始")
 
         new_articles = []
-        current_page = start_page
 
-        for _ in range(MAX_PAGES_PER_RUN):
-            logger.info("抓取第 " + str(current_page) + " 頁...")
-            posts = self._fetch_page(current_page)
-
-            if not posts:
-                logger.info("沒有更多文章了，已到底")
+        while len(new_articles) < MAX_ARTICLES_PER_RUN:
+            if sitemap_idx >= len(SITEMAP_URLS):
+                logger.info("所有 sitemap 已讀完！")
                 break
 
-            for post in posts:
-                url = post.get("link", "")
-                if not url or self._is_seen(url):
+            sitemap_url = SITEMAP_URLS[sitemap_idx]
+            logger.info("讀取：" + sitemap_url)
+            urls = self._fetch_sitemap_urls(sitemap_url)
+
+            if not urls:
+                sitemap_idx += 1
+                url_idx = 0
+                continue
+
+            logger.info("  共 " + str(len(urls)) + " 篇，從第 " + str(url_idx) + " 筆繼續")
+
+            while url_idx < len(urls):
+                if len(new_articles) >= MAX_ARTICLES_PER_RUN:
+                    break
+
+                url = urls[url_idx]
+                url_idx += 1
+
+                if self._is_seen(url):
                     continue
 
-                # 確認類別
-                cat_ids = post.get("categories", [])
-                category = ""
-                for cid in cat_ids:
-                    if cid in CATEGORY_MAP:
-                        category = CATEGORY_MAP[cid]
-                        break
-                if not category:
-                    continue  # 不在目標類別
+                time.sleep(REQUEST_DELAY)
+                article = self._fetch_article(url)
+                if article:
+                    self._save_article(article)
+                    new_articles.append(article)
+                    logger.info("  ✓ " + article["title"][:40])
 
-                title = self._strip_html(post.get("title", {}).get("rendered", ""))
-                content_html = post.get("content", {}).get("rendered", "")
-                content = self._strip_html(content_html)
+            # 這個 sitemap 讀完了，進下一個
+            if url_idx >= len(urls):
+                sitemap_idx += 1
+                url_idx = 0
 
-                if len(content) < 50:
-                    continue
+            self._save_progress(sitemap_idx, url_idx)
 
-                article = {
-                    "url":       url,
-                    "title":     title,
-                    "author":    "",
-                    "published": post.get("date", "")[:10],
-                    "category":  category,
-                    "content":   content[:4000],
-                }
-                self._save_article(article)
-                new_articles.append(article)
-
-            current_page += 1
-            time.sleep(REQUEST_DELAY)
-
-        self._save_last_page(current_page)
+        self._save_progress(sitemap_idx, url_idx)
         logger.info("共新增 " + str(len(new_articles)) + " 篇文章")
         return new_articles
 
