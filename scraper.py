@@ -34,21 +34,31 @@ class AxisScraper:
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS articles (
-                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    url        TEXT UNIQUE NOT NULL,
-                    url_hash   TEXT UNIQUE NOT NULL,
-                    title      TEXT,
-                    author     TEXT,
-                    published  TEXT,
-                    category   TEXT,
-                    content    TEXT,
-                    summary    TEXT,
-                    commentary TEXT,
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url         TEXT UNIQUE NOT NULL,
+                    url_hash    TEXT UNIQUE NOT NULL,
+                    title       TEXT,
+                    author      TEXT,
+                    published   TEXT,
+                    category    TEXT,
+                    content     TEXT,
+                    summary     TEXT,
+                    commentary  TEXT,
                     translation TEXT,
-                    fetched_at TEXT NOT NULL,
-                    sent       INTEGER DEFAULT 0
+                    fetched_at  TEXT NOT NULL,
+                    sent        INTEGER DEFAULT 0
                 )
             """)
+            # 自動補上缺少的欄位（相容舊資料庫）
+            existing = [row[1] for row in conn.execute("PRAGMA table_info(articles)")]
+            for col, definition in [
+                ("category",    "TEXT"),
+                ("translation", "TEXT"),
+            ]:
+                if col not in existing:
+                    conn.execute("ALTER TABLE articles ADD COLUMN " + col + " " + definition)
+                    conn.commit()
+                    logger.info("已自動新增欄位：" + col)
             conn.commit()
 
     def _url_hash(self, url):
