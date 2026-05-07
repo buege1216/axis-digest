@@ -45,7 +45,7 @@ class Commentator:
                 return resp.text.strip()
             except Exception as e:
                 logger.warning("第 " + str(attempt + 1) + " 次失敗：" + str(e))
-                time.sleep(3)
+                time.sleep(45)
         return ""
 
     def summarize(self, article):
@@ -88,7 +88,7 @@ class Commentator:
         for art in articles:
             logger.info("處理：" + art["title"][:50])
             summary = self.summarize(art)
-            time.sleep(1)
+            time.sleep(15)
             commentary = self.comment(art, summary) if summary else ""
 
             if summary:
@@ -100,7 +100,7 @@ class Commentator:
                     conn.commit()
                 done += 1
                 logger.info("  ✓ 完成")
-            time.sleep(2)
+            time.sleep(15)
 
         logger.info("完成 " + str(done) + " 篇")
         return done
