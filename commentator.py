@@ -70,6 +70,15 @@ class Commentator:
         )
         return self._ask(COMMENTATOR_SYSTEM, prompt, max_tokens=500)
 
+    def translate(self, article):
+        content = article.get("content", "")[:4000]
+        prompt = (
+            "請將以下日文文章翻譯成繁體中文，保持原文段落結構，自然流暢：\n\n"
+            "文章標題：" + article.get("title", "") + "\n"
+            "文章內容：" + content
+        )
+        return self._ask("你是一位專業的日繁翻譯，翻譯自然流暢，保留原文語氣。", prompt, max_tokens=1500)
+    
     def process_all(self, batch=8):
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
@@ -92,10 +101,12 @@ class Commentator:
             commentary = self.comment(art, summary) if summary else ""
 
             if summary:
+                time.sleep(3)
+                translation = self.translate(art)
                 with sqlite3.connect(DB_PATH) as conn:
                     conn.execute(
-                        "UPDATE articles SET summary=?, commentary=? WHERE id=?",
-                        (summary, commentary, art["id"])
+                        "UPDATE articles SET summary=?, commentary=?, translation=? WHERE id=?",
+                        (summary, commentary, translation, art["id"])
                     )
                     conn.commit()
                 done += 1
