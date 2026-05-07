@@ -43,7 +43,7 @@ def main():
 
     elif mode == "send":
         logger.info("📬 寄信模式：從庫存取文章寄出...")
-        articles = scraper.get_unsent(limit=8)
+        articles = scraper.get_unsent(limit=1)
 
         if not articles:
             logger.info("   庫存是空的，請先等系統累積更多文章")
