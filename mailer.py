@@ -38,6 +38,12 @@ def make_card(i, art):
     card += '<div style="padding:16px 28px 24px;">'
     card += '<a href="' + url + '" style="font-family:Arial,sans-serif;font-size:12px;color:#1a1a18;text-decoration:none;border-bottom:1px solid #1a1a18;">閱讀原文 →</a>'
     card += '</div>'
+    translation = art.get("translation", "")
+    if translation:
+        card += '<div style="padding:20px 28px;border-top:1px solid #f1efe8;">'
+        card += '<p style="font-family:Arial,sans-serif;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#b4b2a9;margin:0 0 12px;">繁體中文全文</p>'
+        card += '<p style="font-size:14px;line-height:1.9;color:#2c2c2a;margin:0;white-space:pre-line;">' + translation + '</p>'
+        card += '</div>'
     card += '</div>'
     return card
 
