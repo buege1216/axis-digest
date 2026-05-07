@@ -44,6 +44,7 @@ class AxisScraper:
                     content    TEXT,
                     summary    TEXT,
                     commentary TEXT,
+                    translation TEXT,
                     fetched_at TEXT NOT NULL,
                     sent       INTEGER DEFAULT 0
                 )
