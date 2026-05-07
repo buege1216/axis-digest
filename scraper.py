@@ -1,5 +1,4 @@
 import requests
-from bs4 import BeautifulSoup
 import sqlite3
 import hashlib
 import time
@@ -14,18 +13,17 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = Path("articles.db")
 PROGRESS_FILE = Path("sitemap_progress.txt")
-REQUEST_DELAY = 2.0
+REQUEST_DELAY = 3.0  # Jina AI 有速率限制，稍微慢一點
 
-BASE_URL = "https://www.axismag.jp"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AxisDigestBot/1.0)"}
+JINA_PREFIX = "https://r.jina.ai/"
 
-# sitemap 從15往1讀（新到舊）
 SITEMAP_URLS = [
     "https://www.axismag.jp/post_list-sitemap" + str(i) + ".xml"
     for i in range(15, 0, -1)
 ]
 
-MAX_ARTICLES_PER_RUN = 15  # 每次最多抓幾篇
+MAX_ARTICLES_PER_RUN = 15
 
 
 class AxisScraper:
@@ -64,11 +62,10 @@ class AxisScraper:
         return row is not None
 
     def _get_progress(self):
-        """回傳 (sitemap_index, url_index)，代表上次讀到哪裡"""
         if PROGRESS_FILE.exists():
             parts = PROGRESS_FILE.read_text().strip().split(",")
             return int(parts[0]), int(parts[1])
-        return 0, 0  # 從 sitemap15 第0筆開始
+        return 0, 0
 
     def _save_progress(self, sitemap_idx, url_idx):
         PROGRESS_FILE.write_text(str(sitemap_idx) + "," + str(url_idx))
@@ -96,7 +93,6 @@ class AxisScraper:
                 pass
 
     def _fetch_sitemap_urls(self, sitemap_url):
-        """從 sitemap XML 取得所有文章網址"""
         try:
             resp = requests.get(sitemap_url, headers=HEADERS, timeout=20)
             resp.raise_for_status()
@@ -117,65 +113,47 @@ class AxisScraper:
         return urls
 
     def _fetch_article(self, url):
-        """抓取單篇文章內容"""
+        jina_url = JINA_PREFIX + url
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=15)
-            if resp.status_code == 404:
+            resp = requests.get(jina_url, headers=HEADERS, timeout=30)
+            if resp.status_code != 200:
+                logger.info("  跳過（狀態碼 " + str(resp.status_code) + "）")
                 return None
-            resp.raise_for_status()
         except Exception as e:
-            logger.debug("文章抓取失敗：" + str(e))
+            logger.debug("抓取失敗：" + str(e))
             return None
 
-        soup = BeautifulSoup(resp.text, "html.parser")
-
-        title_el = soup.find("h1")
-        if not title_el:
-            logger.info("  無標題跳過：" + url[-30:])
-            return None
-        title = title_el.get_text(strip=True)
-        if len(title) < 5:
-            logger.info("  標題太短跳過：" + title)
+        text = resp.text.strip()
+        if len(text) < 100:
+            logger.info("  內容太短跳過")
             return None
 
-        date_el = soup.find("time")
+        # Jina 回傳格式：第一行是標題（# 開頭），其餘是內文
+        lines = text.split("\n")
+        title = ""
+        content_lines = []
 
-        # 從 meta og:description 取得摘要當作備用內文
-        meta_desc = soup.find("meta", {"name": "description"}) or \
-                    soup.find("meta", {"property": "og:description"})
-        meta_content = meta_desc.get("content", "") if meta_desc else ""
+        for line in lines:
+            stripped = line.strip()
+            if not title and stripped.startswith("#"):
+                title = stripped.lstrip("#").strip()
+            elif stripped:
+                content_lines.append(stripped)
 
-        # 嘗試抓內文
-        body = soup.select_one(".post-content, .entry-content, .article-body, "
-                               ".article__body, .article-text, #article-body, article")
-        paragraphs = []
-        if body:
-            for p in body.find_all("p"):
-                text = p.get_text(" ", strip=True)
-                if len(text) > 30:
-                    paragraphs.append(text)
-
-        content = "\n\n".join(paragraphs)
-
-        # 如果內文太短，用 meta description 補充
-        if len(content) < 100 and meta_content:
-            content = meta_content
-
-        if len(content) < 30:
-            logger.info("  內容太短跳過（" + str(len(content)) + " 字）：" + title[:30])
+        if not title or len(title) < 5:
+            logger.info("  無標題跳過")
             return None
 
-        logger.info("  內容長度：" + str(len(content)) + " 字")
+        content = "\n\n".join(content_lines[:80])  # 最多80行
+        if len(content) < 50:
+            logger.info("  內文太短跳過：" + title[:30])
+            return None
 
-        # 從網址抓年月當作發布日期備用
-        published = ""
-        if date_el:
-            published = date_el.get_text(strip=True)
-        else:
-            m = re.search(r"/posts/(\d{4})/(\d{2})/", url)
-            if m:
-                published = m.group(1) + "-" + m.group(2)
+        # 從網址取年月當發布日期
+        m = re.search(r"/posts/(\d{4})/(\d{2})/", url)
+        published = (m.group(1) + "-" + m.group(2)) if m else ""
 
+        logger.info("  ✓ " + title[:45] + "（" + str(len(content)) + " 字）")
         return {
             "url":       url,
             "title":     title,
@@ -222,9 +200,7 @@ class AxisScraper:
                 if article:
                     self._save_article(article)
                     new_articles.append(article)
-                    logger.info("  ✓ " + article["title"][:40])
 
-            # 這個 sitemap 讀完了，進下一個
             if url_idx >= len(urls):
                 sitemap_idx += 1
                 url_idx = 0
