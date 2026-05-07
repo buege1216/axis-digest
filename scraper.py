@@ -228,3 +228,10 @@ class AxisScraper:
                 [(i,) for i in ids]
             )
             conn.commit()
+    def get_unsent_count(self):
+        with sqlite3.connect(DB_PATH) as conn:
+            row = conn.execute("""
+                SELECT COUNT(*) FROM articles
+                WHERE sent = 0 AND summary IS NOT NULL
+            """).fetchone()
+        return row[0] if row else 0
