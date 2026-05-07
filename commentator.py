@@ -29,7 +29,7 @@ class Commentator:
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY", "")
         self.client = genai.Client(api_key=api_key)
-        self.model = "gemini-2.0-flash"
+        self.model = "gemini-2.5-flash"
 
     def _ask(self, system, prompt, max_tokens=600):
         for attempt in range(3):
