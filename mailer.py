@@ -18,8 +18,11 @@ def make_card(i, art):
     title = art.get("title", "（無標題）")
     summary = art.get("summary", "")
     commentary = art.get("commentary", "")
+    translation = art.get("translation", "")
 
     card = '<div style="background:#ffffff;margin:16px 0;border-radius:4px;border-left:4px solid #1a1a18;">'
+
+    # 標題區
     card += '<div style="padding:24px 28px 16px;border-bottom:1px solid #f1efe8;">'
     card += '<p style="font-family:Arial,sans-serif;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:#b4b2a9;margin:0 0 8px;">文章 ' + f"{i:02d}" + '</p>'
     card += '<h2 style="font-size:20px;font-weight:400;margin:0 0 8px;line-height:1.3;">'
@@ -27,23 +30,30 @@ def make_card(i, art):
     card += '</h2>'
     card += '<p style="font-family:Arial,sans-serif;font-size:12px;color:#888780;margin:0;">' + meta + '</p>'
     card += '</div>'
+
+    # 摘要區
     card += '<div style="padding:20px 28px;border-bottom:1px solid #f1efe8;">'
     card += '<p style="font-family:Arial,sans-serif;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#b4b2a9;margin:0 0 12px;">編輯摘要</p>'
     card += '<p style="font-size:14px;line-height:1.8;color:#444441;margin:0;white-space:pre-line;">' + summary + '</p>'
     card += '</div>'
-    card += '<div style="padding:20px 28px;background:#fafaf8;">'
+
+    # 評論區
+    card += '<div style="padding:20px 28px;background:#fafaf8;border-bottom:1px solid #f1efe8;">'
     card += '<div style="display:inline-block;background:#1a1a18;color:#f1efe8;font-family:Arial,sans-serif;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;padding:4px 10px;border-radius:2px;margin-bottom:12px;">軸心評論 · AI 評論員</div>'
     card += '<p style="font-size:14px;line-height:1.85;color:#2c2c2a;margin:0;font-style:italic;">' + commentary + '</p>'
     card += '</div>'
-    card += '<div style="padding:16px 28px 24px;">'
-    card += '<a href="' + url + '" style="font-family:Arial,sans-serif;font-size:12px;color:#1a1a18;text-decoration:none;border-bottom:1px solid #1a1a18;">閱讀原文 →</a>'
-    card += '</div>'
-    translation = art.get("translation", "")
+
+    # 翻譯全文區
     if translation:
-        card += '<div style="padding:20px 28px;border-top:1px solid #f1efe8;">'
+        card += '<div style="padding:20px 28px;border-bottom:1px solid #f1efe8;">'
         card += '<p style="font-family:Arial,sans-serif;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#b4b2a9;margin:0 0 12px;">繁體中文全文</p>'
         card += '<p style="font-size:14px;line-height:1.9;color:#2c2c2a;margin:0;white-space:pre-line;">' + translation + '</p>'
         card += '</div>'
+
+    # 閱讀原文
+    card += '<div style="padding:16px 28px 24px;">'
+    card += '<a href="' + url + '" style="font-family:Arial,sans-serif;font-size:12px;color:#1a1a18;text-decoration:none;border-bottom:1px solid #1a1a18;">閱讀原文 →</a>'
+    card += '</div>'
     card += '</div>'
     return card
 
