@@ -87,7 +87,7 @@ class Commentator:
         )
         return self._ask("你是一位專業的日繁翻譯，翻譯自然流暢，保留原文語氣。", prompt, max_tokens=1500)
     
-    def process_all(self, batch=8):
+    def process_all(self, batch=5):
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute("""
