@@ -37,9 +37,22 @@ def main():
         done = commentator.process_all(batch=8)
         logger.info("   完成 " + str(done) + " 篇")
 
-        # 顯示目前庫存數量
-        pending = scraper.get_unsent_count()
-        logger.info("📦 目前庫存：" + str(pending) + " 篇待寄出")
+        # 顯示資料庫統計
+        with __import__('sqlite3').connect("articles.db") as conn:
+            total    = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+            has_sum  = conn.execute("SELECT COUNT(*) FROM articles WHERE summary IS NOT NULL").fetchone()[0]
+            sent     = conn.execute("SELECT COUNT(*) FROM articles WHERE sent = 1").fetchone()[0]
+            pending  = conn.execute("SELECT COUNT(*) FROM articles WHERE sent = 0 AND summary IS NOT NULL").fetchone()[0]
+            no_sum   = conn.execute("SELECT COUNT(*) FROM articles WHERE summary IS NULL").fetchone()[0]
+
+        logger.info("═" * 40)
+        logger.info("📊 資料庫統計")
+        logger.info("  總文章數：　　" + str(total) + " 篇")
+        logger.info("  已生成摘要：　" + str(has_sum) + " 篇")
+        logger.info("  待生成摘要：　" + str(no_sum) + " 篇（每天自動處理）")
+        logger.info("  已寄出：　　　" + str(sent) + " 篇")
+        logger.info("  📦 庫存待寄：　" + str(pending) + " 篇")
+        logger.info("═" * 40)
 
     elif mode == "send":
         logger.info("📬 寄信模式：從庫存取文章寄出...")
