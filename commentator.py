@@ -32,7 +32,6 @@ class Commentator:
         self.model = "gemini-2.5-flash"
         self._last_error_is_quota = False
 
-    self._last_error_is_quota = False
     def _ask(self, system, prompt, max_tokens=600):
         for attempt in range(3):
             try:
