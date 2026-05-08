@@ -30,7 +30,9 @@ class Commentator:
         api_key = os.environ.get("GEMINI_API_KEY", "")
         self.client = genai.Client(api_key=api_key)
         self.model = "gemini-2.5-flash"
+        self._last_error_is_quota = False
 
+    self._last_error_is_quota = False
     def _ask(self, system, prompt, max_tokens=600):
         for attempt in range(3):
             try:
@@ -44,8 +46,15 @@ class Commentator:
                 )
                 return resp.text.strip()
             except Exception as e:
-                logger.warning("第 " + str(attempt + 1) + " 次失敗：" + str(e))
-                time.sleep(45)
+                msg = str(e)
+                logger.warning("第 " + str(attempt + 1) + " 次失敗：" + msg)
+                if "503" in msg or "UNAVAILABLE" in msg:
+                    time.sleep(60)
+                elif "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                    self._last_error_is_quota = True
+                    time.sleep(45)
+                else:
+                    time.sleep(15)
         return ""
 
     def summarize(self, article):
@@ -96,13 +105,9 @@ class Commentator:
         done = 0
         for art in articles:
             logger.info("處理：" + art["title"][:50])
-            summary = self.summarize(art)
-            time.sleep(15)
-            commentary = self.comment(art, summary) if summary else ""
+            summary, commentary, translation = self.process_article(art)
 
             if summary:
-                time.sleep(3)
-                translation = self.translate(art)
                 with sqlite3.connect(DB_PATH) as conn:
                     conn.execute(
                         "UPDATE articles SET summary=?, commentary=?, translation=? WHERE id=?",
@@ -110,8 +115,14 @@ class Commentator:
                     )
                     conn.commit()
                 done += 1
-                logger.info("  ✓ 完成")
-            time.sleep(15)
+                logger.info("  ✓ 完成（今日已處理 " + str(done) + " 篇）")
+            elif self._last_error_is_quota:
+                logger.warning("  配額已用盡，今天剩下的留給明天處理")
+                break
+            else:
+                logger.warning("  ✗ 失敗，跳過")
+
+            time.sleep(5)
 
         logger.info("完成 " + str(done) + " 篇")
         return done
