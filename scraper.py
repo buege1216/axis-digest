@@ -23,7 +23,7 @@ SITEMAP_URLS = [
     for i in range(15, 0, -1)
 ]
 
-MAX_ARTICLES_PER_RUN = 15
+MAX_ARTICLES_PER_RUN = 5
 
 
 class AxisScraper:
