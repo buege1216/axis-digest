@@ -40,7 +40,7 @@ def main():
                 root = ET.fromstring(r.content)
                 ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
                 total_site += len(root.findall(".//sm:url", ns))
-        except Exception:
+    except Exception:
             total_site = 13779  # 抓取失敗時用預設值
     
     if mode == "process":
