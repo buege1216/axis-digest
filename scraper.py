@@ -139,23 +139,48 @@ class AxisScraper:
             logger.info("  內容太短跳過")
             return None
 
-        # Jina 回傳格式：第一行是標題（# 開頭），其餘是內文
         lines = text.split("\n")
         title = ""
         content_lines = []
+        article_started = False
+        date_pattern = re.compile(r"\d{4}\.\d{2}\.\d{2}")
 
         for line in lines:
             stripped = line.strip()
-            if not title and stripped.startswith("#"):
-                title = stripped.lstrip("#").strip()
-            elif stripped:
+            if not stripped:
+                continue
+
+            # 找文章標題（# 開頭，不是網站名稱）
+            if stripped.startswith("# ") and not title:
+                candidate = stripped.lstrip("#").strip()
+                if "AXIS WEB" not in candidate and "axismag" not in candidate.lower():
+                    title = candidate
+                continue
+
+            # 找到日期行，之後才是內文
+            if not article_started and date_pattern.search(stripped):
+                article_started = True
+                continue
+
+            # 內文開始後收集，跳過雜訊
+            if article_started:
+                if any(skip in stripped for skip in [
+                    "![Image", "FOLLOW US", "Facebook", "Twitter",
+                    "Instagram", "YouTube", "LINE", "Spotify",
+                    "プライバシー", "お問い合わせ", "運営会社",
+                    "広告掲載", "採用情報", "関連する記事",
+                    "### [NEWS", "#### [", "AXIS WEB"
+                ]):
+                    continue
+                if stripped.startswith("*   [") or stripped.startswith("- ["):
+                    continue
                 content_lines.append(stripped)
 
         if not title or len(title) < 5:
             logger.info("  無標題跳過")
             return None
 
-        content = "\n\n".join(content_lines[:80])  # 最多80行
+        content = "\n\n".join(content_lines)
         if len(content) < 50:
             logger.info("  內文太短跳過：" + title[:30])
             return None
