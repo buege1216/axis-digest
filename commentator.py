@@ -55,33 +55,34 @@ class Commentator:
         title = article.get("title", "")
 
         prompt = (
-            "請針對以下文章，依序輸出三個區塊，每個區塊用「===」分隔：\n\n"
-            "區塊1【摘要】\n"
-            "・核心主題：一句話（25字內）\n"
-            "・重點：3個要點，每點以「• 」開頭\n"
-            "・延伸思考：一句提問\n\n"
-            "區塊2【評論】\n"
-            "犀利開篇、引用案例、點出盲點、金句結尾，約150字\n\n"
-            "區塊3【重點翻譯】\n"
-            "從文章中挑選最能代表核心論點的2-3段，翻譯成繁體中文，保留原文語氣\n\n"
-            "===\n"
-            "文章標題：" + title + "\n"
-            "文章內容：" + content
+            "請嚴格按照以下格式輸出，不要加任何額外說明：\n\n"
+            "===摘要===\n"
+            "核心主題：（25字內）\n"
+            "• 要點一\n"
+            "• 要點二\n"
+            "• 要點三\n"
+            "延伸思考：（一句提問）\n\n"
+            "===評論===\n"
+            "（犀利開篇、引用案例、點出盲點、金句結尾，約150字，繁體中文）\n\n"
+            "===翻譯===\n"
+            "（從文章挑選2-3段最重要的內容，翻譯成繁體中文）\n\n"
+            "以下是文章內容：\n"
+            "標題：" + title + "\n"
+            "內容：" + content
         )
 
         result = self._ask(prompt, max_tokens=900)
         if not result:
             return "", "", ""
 
-        parts = result.split("===")
-        summary     = parts[0].strip() if len(parts) > 0 else ""
-        commentary  = parts[1].strip() if len(parts) > 1 else ""
-        translation = parts[2].strip() if len(parts) > 2 else ""
+        import re as _re
+        summary     = _re.search(r"===摘要===(.*?)===評論===", result, _re.DOTALL)
+        commentary  = _re.search(r"===評論===(.*?)===翻譯===", result, _re.DOTALL)
+        translation = _re.search(r"===翻譯===(.*?)$",          result, _re.DOTALL)
 
-        for label in ["【摘要】", "【評論】", "【重點翻譯】", "區塊1", "區塊2", "區塊3"]:
-            summary     = summary.replace(label, "").strip()
-            commentary  = commentary.replace(label, "").strip()
-            translation = translation.replace(label, "").strip()
+        summary     = summary.group(1).strip()     if summary     else ""
+        commentary  = commentary.group(1).strip()  if commentary  else ""
+        translation = translation.group(1).strip() if translation else ""
 
         return summary, commentary, translation
 
