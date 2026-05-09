@@ -79,3 +79,12 @@ jobs:
           git add db/
           git diff --staged --quiet || git commit -m "更新資料庫"
           git push
+
+      - name: 匯出 JSON 給網頁
+        run: python export_json.py
+
+      - name: 更新網頁資料
+        run: |
+          git add docs/data.json
+          git diff --staged --quiet || git commit -m "更新網頁資料"
+          git push
