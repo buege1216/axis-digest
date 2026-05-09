@@ -115,10 +115,27 @@ class AxisScraper:
         try:
             root = ET.fromstring(resp.content)
             ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-            for loc in root.findall(".//sm:loc", ns):
+            for url_el in root.findall(".//sm:url", ns):
+                loc = url_el.find("sm:loc", ns)
+                lastmod = url_el.find("sm:lastmod", ns)
+                if loc is None:
+                    continue
                 url = loc.text.strip()
-                if re.search(r"/posts/\d{4}/\d{2}/\d+\.html", url):
-                    urls.append(url)
+                if not re.search(r"/posts/\d{4}/\d{2}/\d+\.html", url):
+                    continue
+                # 取 lastmod，轉成台灣時間（UTC+8）
+                published = ""
+                if lastmod is not None and lastmod.text:
+                    raw = lastmod.text.strip()
+                    try:
+                        from datetime import timezone, timedelta
+                        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                        tw_tz = timezone(timedelta(hours=8))
+                        dt_tw = dt.astimezone(tw_tz)
+                        published = dt_tw.strftime("%Y-%m-%d %H:%M")
+                    except Exception:
+                        published = raw[:10]
+                urls.append((url, published))
         except Exception as e:
             logger.error("Sitemap 解析失敗：" + str(e))
         return list(reversed(urls))
