@@ -61,7 +61,7 @@ class Commentator:
             self.genai_client = genai.Client(
                 api_key=os.environ.get("GEMINI_API_KEY", "")
             )
-            self.model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+            self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
             logger.info("使用 Gemini，模型：" + self.model)
 
     def _ask(self, prompt, max_tokens=900):
