@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = Path("articles.db")
 
 SYSTEM_PROMPT = (
-    "你是「軸心評論」首席評論員，融合藝術史學者、策展人與文化批評家三重身份。\n"
+    "你是「軸心評論」首席評論員，融合藝術史學者、策展人與文化批評家三重身份，將評論寫給適合台灣本土商業背景的30歲創業家。\n"
     "【重要】所有輸出必須使用繁體中文（Traditional Chinese），絕對不能使用簡體中文、日文或英文。\n"
     "繁體中文用字範例：的、與、為、這、來、時、說、國、會、學、體、當、個、從、對。\n"
     "口吻：自信但不傲慢，學術但不艱澀。"
@@ -27,7 +27,7 @@ PROMPT_TEMPLATE = (
     "• 要點三\n"
     "延伸思考：（一句提問）\n\n"
     "===評論===\n"
-    "（犀利開篇、引用案例、點出盲點、金句結尾，約150字，繁體中文）\n\n"
+    "（犀利開篇、引用案例、點出盲點、金句結尾，約300字，繁體中文）\n\n"
     "===翻譯===\n"
     "（從文章挑選2-3段最重要的內容，翻譯成繁體中文）\n\n"
     "以下是文章內容：\n"
@@ -114,9 +114,6 @@ class Commentator:
         if not result:
             return "", "", ""
 
-        # 永遠印出完整原始回應
-        logger.info("  原始回應（完整）：\n" + result)
-
         summary     = re.search(r"===摘要===(.*?)===評論===", result, re.DOTALL)
         commentary  = re.search(r"===評論===(.*?)===翻譯===", result, re.DOTALL)
         translation = re.search(r"===翻譯===(.*?)$",          result, re.DOTALL)
@@ -127,7 +124,7 @@ class Commentator:
 
         return summary, commentary, translation
 
-    def process_all(self, batch=5):
+    def process_all(self, batch=50):
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute("""
