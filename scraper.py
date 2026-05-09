@@ -242,14 +242,14 @@ class AxisScraper:
                 if len(new_articles) >= MAX_ARTICLES_PER_RUN:
                     break
 
-                url = urls[url_idx]
+                url, published = urls[url_idx]
                 url_idx += 1
 
                 if self._is_seen(url):
                     continue
 
                 time.sleep(REQUEST_DELAY)
-                article = self._fetch_article(url)
+                article = self._fetch_article(url, published)
                 if article:
                     self._save_article(article)
                     new_articles.append(article)
