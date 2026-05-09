@@ -112,6 +112,10 @@ class Commentator:
         if not result:
             return "", "", ""
 
+        # 如果格式不對，印出原始回應方便除錯
+        if "===摘要===" not in result or "===評論===" not in result:
+            logger.warning("  格式異常，原始回應：" + result[:200])
+
         summary     = re.search(r"===摘要===(.*?)===評論===", result, re.DOTALL)
         commentary  = re.search(r"===評論===(.*?)===翻譯===", result, re.DOTALL)
         translation = re.search(r"===翻譯===(.*?)$",          result, re.DOTALL)
