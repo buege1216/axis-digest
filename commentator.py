@@ -137,11 +137,21 @@ class Commentator:
             return 0
 
         done = 0
-        for art in articles:
+          for art in articles:
             logger.info("處理：" + art["title"][:50])
             summary, commentary, translation = self.process_article(art)
 
-            if summary:
+            def _is_valid(text, min_len=50, must_contain=None):
+                if not text or len(text) < min_len:
+                    return False
+                if must_contain:
+                    return any(k in text for k in must_contain)
+                return True
+
+            summary_ok    = _is_valid(summary,     min_len=50, must_contain=["核心主題", "•"])
+            commentary_ok = _is_valid(commentary,  min_len=30)
+
+            if summary_ok and commentary_ok:
                 with sqlite3.connect(DB_PATH) as conn:
                     conn.execute(
                         "UPDATE articles SET summary=?, commentary=?, translation=? WHERE id=?",
@@ -149,12 +159,18 @@ class Commentator:
                     )
                     conn.commit()
                 done += 1
-                logger.info("  ✓ 完成（今日已處理 " + str(done) + " 篇）")
+                logger.info("  ✓ 完成（摘要 " + str(len(summary)) + " 字，評論 " + str(len(commentary)) + " 字，翻譯 " + str(len(translation)) + " 字）")
             elif self._last_error_is_quota:
                 logger.warning("  配額已用盡，今天剩下的留給明天處理")
                 break
             else:
-                logger.warning("  ✗ 失敗，跳過")
+                logger.warning("  ✗ 品質不合格（摘要:" + str(len(summary)) + "字，評論:" + str(len(commentary)) + "字），標記重試")
+                with sqlite3.connect(DB_PATH) as conn:
+                    conn.execute(
+                        "UPDATE articles SET summary=NULL, commentary=NULL, translation=NULL WHERE id=?",
+                        (art["id"],)
+                    )
+                    conn.commit()
 
             time.sleep(5)
 
