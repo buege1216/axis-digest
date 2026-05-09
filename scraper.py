@@ -118,8 +118,8 @@ class AxisScraper:
                     urls.append(url)
         except Exception as e:
             logger.error("主 Sitemap 解析失敗：" + str(e))
-        # 從大到小排序（新的在前）
-        urls.sort(reverse=True)
+        # 按檔名數字從大到小排序（sitemap15 最新，排最前面）
+        urls.sort(key=lambda u: int(re.search(r"sitemap(\d+)", u).group(1)) if re.search(r"sitemap(\d+)", u) else 0, reverse=True)
         logger.info("找到 " + str(len(urls)) + " 個 sitemap")
         return urls
     
@@ -238,26 +238,29 @@ class AxisScraper:
 
     def run(self):
         sitemap_idx, url_idx = self._get_progress()
-        logger.info("從 sitemap " + str(sitemap_idx + 1) + "/15，第 " + str(url_idx) + " 筆開始")
+        logger.info("從 sitemap 進度：第 " + str(sitemap_idx) + " 個，第 " + str(url_idx) + " 筆")
 
-        new_articles = []
-
-        SITEMAP_URLS = self._fetch_all_sitemap_urls()
-        if not SITEMAP_URLS:
+        # 取得所有 sitemap 清單
+        all_sitemaps = self._fetch_all_sitemap_urls()
+        if not all_sitemaps:
             logger.error("無法取得 sitemap 清單")
             return []
 
+        new_articles = []
+
         while len(new_articles) < MAX_ARTICLES_PER_RUN:
-            if sitemap_idx >= len(SITEMAP_URLS):
+            if sitemap_idx >= len(all_sitemaps):
                 logger.info("所有 sitemap 已讀完！")
                 break
-            sitemap_url = SITEMAP_URLS[sitemap_idx]
+
+            sitemap_url = all_sitemaps[sitemap_idx]
             logger.info("讀取：" + sitemap_url)
             urls = self._fetch_sitemap_urls(sitemap_url)
 
             if not urls:
                 sitemap_idx += 1
                 url_idx = 0
+                self._save_progress(sitemap_idx, url_idx)
                 continue
 
             logger.info("  共 " + str(len(urls)) + " 篇，從第 " + str(url_idx) + " 筆繼續")
