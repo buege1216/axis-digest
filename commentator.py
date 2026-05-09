@@ -53,7 +53,7 @@ class Commentator:
                 api_key=os.environ.get("MINIMAX_API_KEY", ""),
                 base_url="https://api.minimax.chat/v1",
             )
-            self.model = os.environ.get("MINIMAX_MODEL", "MiniMax-Text-01")
+            self.model = os.environ.get("MINIMAX_MODEL", "MiniMax-M2.5")
             logger.info("使用 MiniMax，模型：" + self.model)
 
         else:  # 預設 gemini
