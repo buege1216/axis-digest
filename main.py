@@ -29,7 +29,7 @@ def main():
     commentator = Commentator()
 
     # 自動計算網站總文章數
-        try:
+    try:
             import xml.etree.ElementTree as ET
             total_site = 0
             for i in range(1, 20):
