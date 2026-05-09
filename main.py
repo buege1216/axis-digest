@@ -53,6 +53,7 @@ def main():
         logger.info("   完成 " + str(done) + " 篇")
 
         # 顯示資料庫統計
+        pending_articles = []
         with __import__('sqlite3').connect("articles.db") as _conn:
             total_db   = _conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
             no_summary = _conn.execute("SELECT COUNT(*) FROM articles WHERE summary IS NULL").fetchone()[0]
