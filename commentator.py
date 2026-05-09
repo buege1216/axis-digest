@@ -95,12 +95,12 @@ class Commentator:
                 msg = str(e)
                 logger.warning("第 " + str(attempt + 1) + " 次失敗：" + msg)
                 if "503" in msg or "UNAVAILABLE" in msg:
-                    time.sleep(60)
+                    time.sleep(90)
                 elif "429" in msg or "RESOURCE_EXHAUSTED" in msg or "rate_limit" in msg.lower():
                     self._last_error_is_quota = True
-                    time.sleep(45)
+                    time.sleep(90)
                 else:
-                    time.sleep(15)
+                    time.sleep(60)
         return ""
 
     def process_article(self, article):
