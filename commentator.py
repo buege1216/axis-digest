@@ -55,7 +55,7 @@ class Commentator:
                 api_key=os.environ.get("MINIMAX_API_KEY", ""),
                 base_url="https://api.minimax.chat/v1",
             )
-            self.model = os.environ.get("MINIMAX_MODEL", "MiniMax-M2.5")
+            self.model = os.environ.get("MINIMAX_MODEL", "MiniMax-M2.7")
             logger.info("使用 MiniMax，模型：" + self.model)
 
         else:  # 預設 gemini
@@ -63,7 +63,7 @@ class Commentator:
             self.genai_client = genai.Client(
                 api_key=os.environ.get("GEMINI_API_KEY", "")
             )
-            self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+            self.model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
             logger.info("使用 Gemini，模型：" + self.model)
 
     def _ask(self, prompt, max_tokens=900):
