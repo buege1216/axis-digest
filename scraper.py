@@ -18,10 +18,7 @@ REQUEST_DELAY = 3.0  # Jina AI 有速率限制，稍微慢一點
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AxisDigestBot/1.0)"}
 JINA_PREFIX = "https://r.jina.ai/"
 
-SITEMAP_URLS = [
-    "https://www.axismag.jp/post_list-sitemap" + str(i) + ".xml"
-    for i in range(15, 0, -1)
-]
+SITEMAP_INDEX_URL = "https://www.axismag.jp/sitemap.xml"
 
 MAX_ARTICLES_PER_RUN = 50
 
@@ -102,7 +99,30 @@ class AxisScraper:
                 logger.info("已儲存：" + article["title"][:50])
             except sqlite3.IntegrityError:
                 pass
+                
+    def _fetch_all_sitemap_urls(self):
+        try:
+            resp = requests.get(SITEMAP_INDEX_URL, headers=HEADERS, timeout=20)
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error("主 Sitemap 讀取失敗：" + str(e))
+            return []
 
+        urls = []
+        try:
+            root = ET.fromstring(resp.content)
+            ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+            for loc in root.findall(".//sm:loc", ns):
+                url = loc.text.strip()
+                if "post_list-sitemap" in url:
+                    urls.append(url)
+        except Exception as e:
+            logger.error("主 Sitemap 解析失敗：" + str(e))
+        # 從大到小排序（新的在前）
+        urls.sort(reverse=True)
+        logger.info("找到 " + str(len(urls)) + " 個 sitemap")
+        return urls
+    
     def _fetch_sitemap_urls(self, sitemap_url):
         try:
             resp = requests.get(sitemap_url, headers=HEADERS, timeout=20)
@@ -222,11 +242,15 @@ class AxisScraper:
 
         new_articles = []
 
+        SITEMAP_URLS = self._fetch_all_sitemap_urls()
+        if not SITEMAP_URLS:
+            logger.error("無法取得 sitemap 清單")
+            return []
+
         while len(new_articles) < MAX_ARTICLES_PER_RUN:
             if sitemap_idx >= len(SITEMAP_URLS):
                 logger.info("所有 sitemap 已讀完！")
                 break
-
             sitemap_url = SITEMAP_URLS[sitemap_idx]
             logger.info("讀取：" + sitemap_url)
             urls = self._fetch_sitemap_urls(sitemap_url)
