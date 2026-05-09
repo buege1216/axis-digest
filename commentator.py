@@ -137,7 +137,7 @@ class Commentator:
             return 0
 
         done = 0
-          for art in articles:
+        for art in articles:
             logger.info("處理：" + art["title"][:50])
             summary, commentary, translation = self.process_article(art)
 
