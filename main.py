@@ -45,6 +45,18 @@ def main():
             pending  = conn.execute("SELECT COUNT(*) FROM articles WHERE sent = 0 AND summary IS NOT NULL").fetchone()[0]
             no_sum   = conn.execute("SELECT COUNT(*) FROM articles WHERE summary IS NULL").fetchone()[0]
 
+        # 顯示待重試文章清單
+        with __import__('sqlite3').connect("articles.db") as _conn:
+            pending_articles = _conn.execute("""
+                SELECT title, published FROM articles
+                WHERE summary IS NULL AND content != ''
+                ORDER BY fetched_at DESC LIMIT 10
+            """).fetchall()
+        if pending_articles:
+            logger.info("  📋 待處理文章清單（最新10篇）：")
+            for row in pending_articles:
+                logger.info("     - " + str(row[1]) + "　" + str(row[0])[:40])
+                
         logger.info("═" * 40)
         logger.info("📊 資料庫統計")
         logger.info("  總文章數：　　" + str(total) + " 篇")
