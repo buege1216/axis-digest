@@ -121,7 +121,7 @@ class AxisScraper:
                     urls.append(url)
         except Exception as e:
             logger.error("Sitemap 解析失敗：" + str(e))
-        return urls
+        return list(reversed(urls))
 
     def _fetch_article(self, url):
         jina_url = JINA_PREFIX + url
