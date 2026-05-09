@@ -49,7 +49,7 @@ def main():
         logger.info("   新增 " + str(len(new_articles)) + " 篇")
 
         logger.info("🤖 Step 2：生成 AI 摘要與評論...")
-        done = commentator.process_all(batch=8)
+        done = commentator.process_all(batch=50)
         logger.info("   完成 " + str(done) + " 篇")
 
         # 顯示資料庫統計
