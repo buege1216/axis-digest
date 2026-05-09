@@ -140,7 +140,7 @@ class AxisScraper:
             logger.error("Sitemap 解析失敗：" + str(e))
         return list(reversed(urls))
 
-    def _fetch_article(self, url):
+    def _fetch_article(self, url, published=""):
         jina_url = JINA_PREFIX + url
         try:
             resp = requests.get(jina_url, headers=HEADERS, timeout=30)
