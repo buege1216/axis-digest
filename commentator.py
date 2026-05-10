@@ -21,15 +21,15 @@ PROMPT_TEMPLATE = (
     "請嚴格按照以下格式輸出，不要加任何額外說明。\n"
     "所有文字必須使用繁體中文，不得使用簡體中文或日文或英文。\n\n"
     "===摘要===\n"
-    "核心主題：（25字內）\n"
+    "核心主題：\n"
     "• 要點一\n"
     "• 要點二\n"
     "• 要點三\n"
-    "延伸思考：（一句提問）\n\n"
+    "延伸思考：\n\n"
     "===評論===\n"
-    "（犀利開篇、引用案例、點出盲點、金句結尾，約300字，繁體中文）\n\n"
+    "直接輸出評論內容，犀利開篇、引用案例、點出盲點、金句結尾，約300字，繁體中文。\n\n"
     "===翻譯===\n"
-    "（從文章挑選2-3段最重要的內容，翻譯成繁體中文）\n\n"
+    "直接輸出翻譯內容，不要有任何說明或前言。\n\n"
     "以下是文章內容：\n"
     "標題：{title}\n"
     "內容：{content}"
@@ -50,7 +50,7 @@ class Commentator:
             logger.info("使用 OpenAI，模型：" + self.model)
 
         elif self.provider == "minimax":
-            from openai import OpenAI  # MiniMax 相容 OpenAI 格式
+            from openai import OpenAI
             self.client = OpenAI(
                 api_key=os.environ.get("MINIMAX_API_KEY", ""),
                 base_url="https://api.minimax.chat/v1",
@@ -58,7 +58,7 @@ class Commentator:
             self.model = os.environ.get("MINIMAX_MODEL", "MiniMax-M2.7")
             logger.info("使用 MiniMax，模型：" + self.model)
 
-        else:  # 預設 gemini
+        else:
             from google import genai
             self.genai_client = genai.Client(
                 api_key=os.environ.get("GEMINI_API_KEY", "")
@@ -66,7 +66,7 @@ class Commentator:
             self.model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
             logger.info("使用 Gemini，模型：" + self.model)
 
-    def _ask(self, prompt, max_tokens=900):
+    def _ask(self, prompt, max_tokens=1200):
         self._last_error_is_quota = False
         for attempt in range(3):
             try:
@@ -82,7 +82,6 @@ class Commentator:
                     )
                     return resp.text.strip()
                 else:
-                    # OpenAI / MiniMax 共用相同介面
                     resp = self.client.chat.completions.create(
                         model=self.model,
                         messages=[
@@ -105,12 +104,31 @@ class Commentator:
                     time.sleep(60)
         return ""
 
+    def _clean(self, text):
+        """清除 AI 自言自語的說明文字"""
+        lines = text.split("\n")
+        cleaned = []
+        for line in lines:
+            stripped = line.strip()
+            if any(skip in stripped for skip in [
+                "從文章挑選", "翻譯成繁體中文", "以下是翻譯",
+                "以下是摘要", "以下是評論", "我需要", "我注意到",
+                "現在我", "讓我來", "接下來我將", "根據文章",
+                "根據以上", "以下為", "犀利開篇", "引用案例",
+                "點出盲點", "金句結尾", "直接輸出",
+                "要點一", "要點二", "要點三",
+                "核心主題：（", "延伸思考：（",
+            ]):
+                continue
+            cleaned.append(line)
+        return "\n".join(cleaned).strip()
+
     def process_article(self, article):
         content = article.get("content", "")[:3000]
         title = article.get("title", "")
         prompt = PROMPT_TEMPLATE.format(title=title, content=content)
 
-        result = self._ask(prompt, max_tokens=900)
+        result = self._ask(prompt, max_tokens=1200)
         if not result:
             return "", "", ""
 
@@ -118,9 +136,9 @@ class Commentator:
         commentary  = re.search(r"===評論===(.*?)===翻譯===", result, re.DOTALL)
         translation = re.search(r"===翻譯===(.*?)$",          result, re.DOTALL)
 
-        summary     = summary.group(1).strip()     if summary     else ""
-        commentary  = commentary.group(1).strip()  if commentary  else ""
-        translation = translation.group(1).strip() if translation else ""
+        summary     = self._clean(summary.group(1).strip())     if summary     else ""
+        commentary  = self._clean(commentary.group(1).strip())  if commentary  else ""
+        translation = self._clean(translation.group(1).strip()) if translation else ""
 
         return summary, commentary, translation
 
@@ -130,7 +148,7 @@ class Commentator:
             rows = conn.execute("""
                 SELECT id, title, content FROM articles
                 WHERE summary IS NULL AND content != ''
-                ORDER BY fetched_at DESC LIMIT ?
+                ORDER BY published DESC LIMIT ?
             """, (batch,)).fetchall()
 
         articles = [dict(r) for r in rows]
@@ -150,8 +168,12 @@ class Commentator:
                     return any(k in text for k in must_contain)
                 return True
 
-            summary_ok    = _is_valid(summary,     min_len=50, must_contain=["核心主題", "•"])
-            commentary_ok = _is_valid(commentary,  min_len=30)
+            # 偵測 prompt 殘留
+            prompt_leaked = any(kw in (summary + commentary) for kw in [
+                "要點一", "要點二", "25字內", "犀利開篇", "直接輸出"
+            ])
+            summary_ok    = _is_valid(summary,    min_len=50, must_contain=["核心主題", "•"]) and not prompt_leaked
+            commentary_ok = _is_valid(commentary, min_len=30)
 
             if summary_ok and commentary_ok:
                 with sqlite3.connect(DB_PATH) as conn:
