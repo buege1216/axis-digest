@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 import os
 from scraper import AxisScraper
 from commentator import Commentator
