@@ -96,6 +96,7 @@ def main():
             "<tr><td>⏳ 待摘要</td><td><b>" + str(no_summary) + "</b> 篇</td></tr>"
             "<tr><td>📥 待閱讀</td><td><b>" + str(pending) + "</b> 篇</td></tr>"
             "<tr><td>✅ 已閱讀</td><td><b>" + str(sent) + "</b> 篇</td></tr>"
+            "<tr><td>📊 總文章</td><td><b>" + str(total_site) + "</b> 篇</td></tr>"
             "</table>"
             "<p style='margin-top:16px;color:#888;font-size:12px'>執行時間：" + datetime.now().strftime("%Y-%m-%d %H:%M") + " UTC</p>"
             "</div>"
