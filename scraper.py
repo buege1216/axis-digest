@@ -202,7 +202,7 @@ class AxisScraper:
             # 內文開始後收集，跳過雜訊
             if article_started:
                 if any(skip in stripped for skip in [
-                    "![Image", "FOLLOW US", "Facebook", "Twitter",
+                    "FOLLOW US", "Facebook", "Twitter",
                     "Instagram", "YouTube", "LINE", "Spotify",
                     "プライバシー", "お問い合わせ", "運営会社",
                     "広告掲載", "採用情報", "関連する記事",
