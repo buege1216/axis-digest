@@ -14,9 +14,12 @@ on:
         options:
           - process
           - send
+          - pages
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   run-digest:
@@ -53,6 +56,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: 執行
+        if: env.RUN_MODE != 'pages'
         run: python main.py
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -64,10 +68,15 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
 
+      - name: 匯出網頁資料
+        run: python export_json.py
+
       - name: 儲存資料庫
         run: |
           mkdir -p db
-          cp articles.db db/articles.db
+          if [ -f articles.db ]; then
+            cp articles.db db/articles.db
+          fi
           if [ -f sitemap_progress.txt ]; then
             cp sitemap_progress.txt db/sitemap_progress.txt
           fi
@@ -76,15 +85,6 @@ jobs:
           fi
           git config user.name "Axis Digest Bot"
           git config user.email "bot@axis-digest"
-          git add db/
-          git diff --staged --quiet || git commit -m "更新資料庫"
-          git push
-
-      - name: 匯出 JSON 給網頁
-        run: python export_json.py
-
-      - name: 更新網頁資料
-        run: |
-          git add docs/data.json
-          git diff --staged --quiet || git commit -m "更新網頁資料"
+          git add db/ docs/
+          git diff --staged --quiet || git commit -m "更新資料庫與網頁資料"
           git push
