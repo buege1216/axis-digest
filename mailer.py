@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 def render_content(text):
-    """把文章圖片轉成 HTML img 標籤，過濾掉網站制式圖片"""
     if not text:
         return ""
     def replace_img(m):
@@ -20,7 +19,10 @@ def render_content(text):
         if "wp-content/uploads" in url:
             return '<img src="' + url + '" style="max-width:100%;height:auto;margin:12px 0;display:block;border-radius:2px;">'
         return ""
+    # 先處理圖片
     text = re.sub(r'!\[.*?\]\((https?://[^\)]+)\)', replace_img, text)
+    # 清掉殘留的圖片說明（沒有配對到網址的 ![...] 格式）
+    text = re.sub(r'!\[.*?\]', '', text)
     text = text.replace("\n", "<br>")
     return text
 
@@ -96,7 +98,7 @@ body{margin:0;padding:0;background:#f5f4f0;font-family:Georgia,serif;color:#2c2c
 .label{font-family:Arial,sans-serif;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#b4b2a9;margin:0 0 10px}
 .body-text{font-size:14px;line-height:1.8;color:#444441;margin:0}
 .badge{display:inline-block;background:#1a1a18;color:#f1efe8;font-family:Arial,sans-serif;font-size:10px;letter-spacing:.15em;text-transform:uppercase;padding:3px 9px;border-radius:2px;margin-bottom:10px}
-.commentary{font-size:14px;line-height:1.85;color:#2c2c2a;margin:0;font-style:italic}
+.commentary{font-size:14px;line-height:1.85;color:#2c2c2a;margin:0;}
 .read-more{padding:14px 28px 22px}
 .read-more a{font-family:Arial,sans-serif;font-size:12px;color:#1a1a18;text-decoration:none;border-bottom:1px solid #1a1a18}
 .ft{background:#1a1a18;padding:24px 32px;border-radius:0 0 4px 4px}
