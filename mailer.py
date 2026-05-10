@@ -1,5 +1,6 @@
 import smtplib
 import os
+import re
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -10,13 +11,27 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 
+def render_content(text):
+    """把文章圖片轉成 HTML img 標籤，過濾掉網站制式圖片"""
+    if not text:
+        return ""
+    def replace_img(m):
+        url = m.group(1)
+        if "wp-content/uploads" in url:
+            return '<img src="' + url + '" style="max-width:100%;height:auto;margin:12px 0;display:block;border-radius:2px;">'
+        return ""
+    text = re.sub(r'!\[.*?\]\((https?://[^\)]+)\)', replace_img, text)
+    text = text.replace("\n", "<br>")
+    return text
+
+
 def make_card(i, art):
-    url = art.get("url", "#")
-    title = art.get("title", "（無標題）")
-    summary = art.get("summary", "")
-    commentary = art.get("commentary", "")
+    url         = art.get("url", "#")
+    title       = art.get("title", "（無標題）")
+    summary     = art.get("summary", "")
+    commentary  = art.get("commentary", "")
     translation = art.get("translation", "")
-    meta = art.get("author", "") or "Axis"
+    meta        = art.get("author", "") or "Axis"
     if art.get("published"):
         meta += "　·　" + art["published"]
 
@@ -25,7 +40,7 @@ def make_card(i, art):
         translation_block = (
             '<div class="section">'
             '<p class="label">繁體中文全文</p>'
-            '<p class="body-text">' + translation.replace("\n", "<br>") + '</p>'
+            '<p class="body-text">' + render_content(translation) + '</p>'
             '</div>'
         )
 
@@ -38,11 +53,11 @@ def make_card(i, art):
         '</div>'
         '<div class="section">'
         '<p class="label">編輯摘要</p>'
-        '<p class="body-text">' + summary.replace("\n", "<br>") + '</p>'
+        '<p class="body-text">' + render_content(summary) + '</p>'
         '</div>'
         '<div class="section section-alt">'
         '<span class="badge">軸心評論 · AI 評論員</span>'
-        '<p class="commentary">' + commentary + '</p>'
+        '<p class="commentary">' + render_content(commentary) + '</p>'
         '</div>'
         + translation_block +
         '<div class="read-more">'
@@ -53,11 +68,10 @@ def make_card(i, art):
 
 
 def build_email(articles, vol=1):
-    now = datetime.now()
+    now      = datetime.now()
     date_str = now.strftime("%Y 年 %m 月 %d 日")
-    n = len(articles)
-
-    cards = "".join(make_card(i, art) for i, art in enumerate(articles, 1))
+    n        = len(articles)
+    cards    = "".join(make_card(i, art) for i, art in enumerate(articles, 1))
 
     css = """
 <style>
@@ -105,7 +119,7 @@ body{margin:0;padding:0;background:#f5f4f0;font-family:Georgia,serif;color:#2c2c
         "<div class='intro'><p>本週 <strong>Axis Digest</strong> 精選了 " + str(n) + " 篇文章，由 AI 評論員為你萃取重點與洞見。</p></div>"
         + cards +
         "<div class='ft'>"
-        "<p>文章來源：axismag.jp　·　AI 摘要由 Gemini 生成，僅供參考</p>"
+        "<p>文章來源：axismag.jp　·　AI 摘要由 MiniMax 生成，僅供參考</p>"
         "<p>© " + str(now.year) + " Axis Digest</p>"
         "</div>"
         "</div></body></html>"
@@ -118,12 +132,12 @@ body{margin:0;padding:0;background:#f5f4f0;font-family:Georgia,serif;color:#2c2c
 def send_email(subject, html):
     smtp_user = os.environ.get("SMTP_USER", "")
     smtp_pass = os.environ.get("SMTP_PASS", "")
-    to_email = os.environ.get("TO_EMAIL", smtp_user)
+    to_email  = os.environ.get("TO_EMAIL", smtp_user)
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = formataddr(("軸心週報 Axis Digest", smtp_user))
-    msg["To"] = to_email
+    msg["From"]    = formataddr(("軸心週報 Axis Digest", smtp_user))
+    msg["To"]      = to_email
     msg.attach(MIMEText("請使用支援 HTML 的郵件客戶端查看。", "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
