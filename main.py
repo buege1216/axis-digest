@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 import os
 from scraper import AxisScraper
 from commentator import Commentator
@@ -98,6 +99,23 @@ def main():
         logger.info("  已寄出：　　　" + str(sent) + " 篇")
         logger.info("  📦 庫存待寄：　" + str(pending) + " 篇")
         logger.info("═" * 40)
+
+        # 寄送每日狀態通知
+        from mailer import send_email
+        status_subject = "⚙️ 軸心週報 今日執行報告 " + datetime.now().strftime("%m/%d")
+        status_html = (
+            "<div style='font-family:Arial,sans-serif;padding:24px;max-width:480px'>"
+            "<h2 style='color:#1a1a18'>今日執行完成</h2>"
+            "<table style='margin-top:16px;width:100%'>"
+            "<tr><td>🌐 未爬取</td><td><b>" + str(not_crawled) + "</b> 篇</td></tr>"
+            "<tr><td>⏳ 待摘要</td><td><b>" + str(no_summary) + "</b> 篇</td></tr>"
+            "<tr><td>📥 待閱讀</td><td><b>" + str(pending) + "</b> 篇</td></tr>"
+            "<tr><td>✅ 已閱讀</td><td><b>" + str(sent) + "</b> 篇</td></tr>"
+            "</table>"
+            "<p style='margin-top:16px;color:#888;font-size:12px'>執行時間：" + datetime.now().strftime("%Y-%m-%d %H:%M") + " UTC</p>"
+            "</div>"
+        )
+        send_email(status_subject, status_html)
 
     elif mode == "send":
         logger.info("📬 寄信模式：從庫存取文章寄出...")
