@@ -1,5 +1,7 @@
 import logging
 import os
+import xml.etree.ElementTree as ET
+from datetime import datetime
 from scraper import AxisScraper
 from commentator import Commentator
 from mailer import build_email, send_email
@@ -16,10 +18,24 @@ def get_vol():
 def next_vol():
     VOL_FILE.write_text(str(get_vol() + 1))
 
+def get_total_site():
+    try:
+        total = 0
+        for i in range(1, 20):
+            sm_url = "https://www.axismag.jp/post_list-sitemap" + str(i) + ".xml"
+            import requests
+            r = requests.get(sm_url, timeout=10)
+            if r.status_code == 404:
+                break
+            root = ET.fromstring(r.content)
+            ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+            total += len(root.findall(".//sm:url", ns))
+        return total
+    except Exception:
+        return 13779
+
 def main():
     mode = os.environ.get("RUN_MODE", "process")
-    # process = 只爬蟲+摘要，不寄信
-    # send    = 從庫存寄一篇給你
 
     logger.info("==================================================")
     logger.info("🚀 Axis Digest 開始執行，模式：" + mode)
@@ -28,21 +44,6 @@ def main():
     scraper = AxisScraper()
     commentator = Commentator()
 
-    # 自動計算網站總文章數
-    try:
-            import xml.etree.ElementTree as ET
-            total_site = 0
-            for i in range(1, 20):
-                sm_url = "https://www.axismag.jp/post_list-sitemap" + str(i) + ".xml"
-                r = __import__('requests').get(sm_url, timeout=10)
-                if r.status_code == 404:
-                    break
-                root = ET.fromstring(r.content)
-                ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-                total_site += len(root.findall(".//sm:url", ns))
-    except Exception:
-            total_site = 13779  # 抓取失敗時用預設值
-    
     if mode == "process":
         logger.info("📰 Step 1：抓取新文章...")
         new_articles = scraper.run()
@@ -52,55 +53,40 @@ def main():
         done = commentator.process_all(batch=50)
         logger.info("   完成 " + str(done) + " 篇")
 
-        # 顯示資料庫統計
-        pending_articles = []
-        with __import__('sqlite3').connect("articles.db") as _conn:
-            total_db   = _conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
-            no_summary = _conn.execute("SELECT COUNT(*) FROM articles WHERE summary IS NULL").fetchone()[0]
-            pending    = _conn.execute("SELECT COUNT(*) FROM articles WHERE summary IS NOT NULL AND sent=0").fetchone()[0]
-            sent       = _conn.execute("SELECT COUNT(*) FROM articles WHERE sent=1").fetchone()[0]
+        # 統計
+        import sqlite3
+        with sqlite3.connect("articles.db") as conn:
+            total_db   = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+            no_summary = conn.execute("SELECT COUNT(*) FROM articles WHERE summary IS NULL").fetchone()[0]
+            pending    = conn.execute("SELECT COUNT(*) FROM articles WHERE summary IS NOT NULL AND sent=0").fetchone()[0]
+            sent       = conn.execute("SELECT COUNT(*) FROM articles WHERE sent=1").fetchone()[0]
+            pending_articles = conn.execute("""
+                SELECT title, published FROM articles
+                WHERE summary IS NULL AND content != ''
+                ORDER BY published DESC LIMIT 10
+            """).fetchall()
 
+        total_site  = get_total_site()
         not_crawled = max(total_site - total_db, 0)
 
         logger.info("═" * 45)
         logger.info("📊 文章進銷存")
         logger.info("  🌐 網站總數：　　　" + str(total_site) + " 篇")
-        logger.info("  ─────────────────────────────")
+        logger.info("  ─────────────────")
         logger.info("  ① 未爬取：　　　　" + str(not_crawled) + " 篇")
         logger.info("  ② 已爬取待摘要：　" + str(no_summary) + " 篇")
-        logger.info("  ③ 待寄出庫存：　　" + str(pending) + " 篇")
-        logger.info("  ④ 已寄出：　　　　" + str(sent) + " 篇")
-        logger.info("  ─────────────────────────────")
+        logger.info("  ③ 待閱讀庫存：　　" + str(pending) + " 篇")
+        logger.info("  ④ 已閱讀：　　　　" + str(sent) + " 篇")
+        logger.info("  ─────────────────")
         logger.info("  資料庫合計：　　　" + str(total_db) + " 篇")
         logger.info("═" * 45)
 
         if pending_articles:
-            logger.info("  📋 待處理文章清單（最新10篇）：")
+            logger.info("  📋 待摘要文章（最新10篇）：")
             for row in pending_articles:
                 logger.info("     - " + str(row[1]) + "　" + str(row[0])[:40])
 
-        # 顯示待重試文章清單
-        with __import__('sqlite3').connect("articles.db") as _conn:
-            pending_articles = _conn.execute("""
-                SELECT title, published FROM articles
-                WHERE summary IS NULL AND content != ''
-                ORDER BY fetched_at DESC LIMIT 10
-            """).fetchall()
-        if pending_articles:
-            logger.info("  📋 待處理文章清單（最新10篇）：")
-            for row in pending_articles:
-                logger.info("     - " + str(row[1]) + "　" + str(row[0])[:40])
-                
-        logger.info("═" * 40)
-        logger.info("📊 資料庫統計")
-        logger.info("  總文章數：　　" + str(total_site) + " 篇")
-        logger.info("  待生成摘要：　" + str(no_summary) + " 篇（每天自動處理）")
-        logger.info("  已寄出：　　　" + str(sent) + " 篇")
-        logger.info("  📦 庫存待寄：　" + str(pending) + " 篇")
-        logger.info("═" * 40)
-
-        # 寄送每日狀態通知
-        from mailer import send_email
+        # 每日狀態通知信
         status_subject = "⚙️ 軸心週報 今日執行報告 " + datetime.now().strftime("%m/%d")
         status_html = (
             "<div style='font-family:Arial,sans-serif;padding:24px;max-width:480px'>"
