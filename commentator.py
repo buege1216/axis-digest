@@ -66,7 +66,7 @@ class Commentator:
             self.model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
             logger.info("使用 Gemini，模型：" + self.model)
 
-    def _ask(self, prompt, max_tokens=1200):
+    def _ask(self, prompt, max_tokens=2000):
         self._last_error_is_quota = False
         for attempt in range(3):
             try:
